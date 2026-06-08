@@ -31,7 +31,7 @@ body {
     box-shadow: 0 0 15px rgba(0,0,0,0.2);
 }
 
-button {
+button, select {
     width: 100%;
     margin-top: 8px;
     padding: 10px;
@@ -49,6 +49,13 @@ button {
 <body>
 
 <div class="panel">
+
+    <select id="routeSelect">
+        <option value="route1">Horsforth Route 1</option>
+        <option value="route2">Horsforth Route 2</option>
+        <option value="route3">Horsforth Route 3</option>
+    </select>
+
     <button onclick="startNav()">Start Navigation</button>
     <button onclick="stopNav()">Stop</button>
 
@@ -73,14 +80,22 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
+// ================= ROUTE DESTINATIONS =================
+
+const routes = {
+    route1: [53.842, -1.637],
+    route2: [53.838, -1.650],
+    route3: [53.846, -1.620]
+};
+
 // ================= STATE =================
 
 let userMarker;
 let routeLine;
 let watchId;
+let currentDestination;
 
-let destination = [53.842, -1.637]; // Horsforth test centre
-
+// follow mode like Google Maps
 let followMode = true;
 
 // ================= ICON =================
@@ -95,22 +110,17 @@ const arrowIcon = L.icon({
 
 function startNav() {
 
-    if (!navigator.geolocation) {
-        alert("GPS not supported");
-        return;
-    }
+    const selected = document.getElementById("routeSelect").value;
+    currentDestination = routes[selected];
 
     document.getElementById("info").innerHTML =
-        "Status: Starting...<br>Speed: 0 mph<br>Route: loading...";
+        "Status: Starting...<br>Speed: 0 mph<br>Route: loading";
 
     navigator.geolocation.getCurrentPosition(pos => {
 
-        const start = [
-            pos.coords.latitude,
-            pos.coords.longitude
-        ];
+        const start = [pos.coords.latitude, pos.coords.longitude];
 
-        buildRoute(start, destination);
+        buildRoute(start, currentDestination);
         startTracking();
 
     });
@@ -123,57 +133,47 @@ async function buildRoute(start, end) {
     const url =
         `https://router.project-osrm.org/route/v1/driving/` +
         `${start[1]},${start[0]};${end[1]},${end[0]}` +
-        `?overview=full&geometries=geojson&steps=true&alternatives=false`;
+        `?overview=full&geometries=geojson&steps=true`;
 
     const res = await fetch(url);
     const data = await res.json();
 
     const route = data.routes[0];
 
-    const coords = route.geometry.coordinates;
-    const latlngs = coords.map(c => [c[1], c[0]]);
+    const latlngs = route.geometry.coordinates.map(c => [c[1], c[0]]);
 
-    if (routeLine) {
-        map.removeLayer(routeLine);
-    }
+    if (routeLine) map.removeLayer(routeLine);
 
     routeLine = L.polyline(latlngs, {
         color: "blue",
         weight: 5
     }).addTo(map);
 
-    // IMPORTANT FIX: no fitBounds glitch anymore
-    map.flyTo(start, 16, {
+    // smooth Google Maps style zoom
+    map.flyToBounds(routeLine.getBounds(), {
+        padding: [50, 50],
         duration: 1.5
     });
-
-    document.getElementById("info").innerHTML =
-        "Status: Navigating<br>Speed: 0 mph<br>Route: Active";
 }
 
-// ================= TRACK USER =================
+// ================= LIVE TRACKING =================
 
 function startTracking() {
 
     watchId = navigator.geolocation.watchPosition(pos => {
 
-        const current = [
-            pos.coords.latitude,
-            pos.coords.longitude
-        ];
+        const current = [pos.coords.latitude, pos.coords.longitude];
 
         const speed = pos.coords.speed ? pos.coords.speed * 2.237 : 0;
 
         // marker
         if (!userMarker) {
-            userMarker = L.marker(current, {
-                icon: arrowIcon
-            }).addTo(map);
+            userMarker = L.marker(current, { icon: arrowIcon }).addTo(map);
         } else {
             userMarker.setLatLng(current);
         }
 
-        // TRUE FOLLOW MODE (FIX FOR YOUR ISSUE)
+        // FOLLOW MODE (fixes centering issue)
         if (followMode) {
             map.setView(current, 17, {
                 animate: true,
@@ -198,14 +198,13 @@ function startTracking() {
 
 function stopNav() {
 
-    if (watchId) {
-        navigator.geolocation.clearWatch(watchId);
-    }
+    if (watchId) navigator.geolocation.clearWatch(watchId);
 
     watchId = null;
 
     document.getElementById("info").innerHTML =
         "Status: Stopped<br>Speed: 0 mph<br>Route: -";
+
 }
 
 </script>
