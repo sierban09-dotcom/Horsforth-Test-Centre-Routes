@@ -2,24 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Driving Test Route Simulator</title>
+<title>Driving Test Navigator Pro</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-}
+body { margin: 0; font-family: Arial; }
 
-#map {
-    height: 100vh;
-    width: 100%;
-}
+#map { height: 100vh; width: 100%; }
 
-/* CONTROL PANEL */
 .panel {
     position: absolute;
     top: 10px;
@@ -28,37 +21,23 @@ body {
     background: white;
     padding: 12px;
     border-radius: 12px;
-    width: 260px;
+    width: 280px;
     box-shadow: 0 0 15px rgba(0,0,0,0.2);
 }
 
-button, select {
+button {
     width: 100%;
     margin-top: 8px;
     padding: 10px;
     font-size: 14px;
-    cursor: pointer;
 }
 
-/* MOBILE OPTIMISATION */
-@media (max-width: 768px) {
-    .panel {
-        width: 90%;
-        left: 5%;
-        font-size: 14px;
-    }
-
-    button {
-        padding: 14px;
-        font-size: 16px;
-    }
-}
-
-/* STATS */
-#stats {
+#info {
     margin-top: 10px;
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 13px;
+    line-height: 1.4;
+    max-height: 160px;
+    overflow-y: auto;
 }
 </style>
 </head>
@@ -66,19 +45,13 @@ button, select {
 <body>
 
 <div class="panel">
-    <select id="routeSelect">
-        <option value="route1">Horsforth Route 1</option>
-        <option value="route2">Horsforth Route 2</option>
-        <option value="route3">Horsforth Route 3</option>
-    </select>
+    <button onclick="startNav()">Start Navigation</button>
+    <button onclick="stopNav()">Stop</button>
 
-    <button onclick="loadRoute()">Load Route</button>
-    <button onclick="startTracking()">Start GPS</button>
-    <button onclick="clearAll()">Clear</button>
-
-    <div id="stats">
+    <div id="info">
+        Status: Idle<br>
         Speed: 0 mph<br>
-        Distance: 0 m
+        Instruction: -
     </div>
 </div>
 
@@ -96,136 +69,162 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// ================= ROUTES =================
-
-const routes = {
-    route1: [
-        [53.8432, -1.6381],
-        [53.8420, -1.6355],
-        [53.8408, -1.6330],
-        [53.8395, -1.6310],
-        [53.8380, -1.6335],
-        [53.8390, -1.6370],
-        [53.8410, -1.6395],
-        [53.8432, -1.6381]
-    ],
-    route2: [
-        [53.8420, -1.6370],
-        [53.8400, -1.6390],
-        [53.8385, -1.6410],
-        [53.8370, -1.6390],
-        [53.8365, -1.6365],
-        [53.8380, -1.6340],
-        [53.8405, -1.6325],
-        [53.8420, -1.6370]
-    ],
-    route3: [
-        [53.8415, -1.6375],
-        [53.8402, -1.6388],
-        [53.8388, -1.6400],
-        [53.8375, -1.6380],
-        [53.8370, -1.6355],
-        [53.8385, -1.6335],
-        [53.8405, -1.6328],
-        [53.8415, -1.6375]
-    ]
-};
-
 // ================= STATE =================
 
-let routeLine = null;
-let userMarker = null;
-let watchId = null;
-let lastPosition = null;
+let userMarker;
+let routeLine;
+let watchId;
 
-let totalDistance = 0;
+let destination = [53.842, -1.637]; // Horsforth centre
 
-// ================= ICON (ARROW) =================
+let lastLatLng = null;
+let currentStepIndex = 0;
+let steps = [];
 
-const userIcon = L.icon({
+// ================= ICON =================
+
+const arrowIcon = L.icon({
     iconUrl: "https://cdn-icons-png.flaticon.com/512/32/32195.png",
     iconSize: [35, 35],
     iconAnchor: [17, 17]
 });
 
-// ================= ROUTE LOADING =================
+// ================= START NAV =================
 
-function loadRoute() {
-
-    const selected = document.getElementById("routeSelect").value;
-    const route = routes[selected];
-
-    if (routeLine) {
-        map.removeLayer(routeLine);
-    }
-
-    routeLine = L.polyline(route, {
-        color: "blue",
-        weight: 5
-    }).addTo(map);
-
-    // smooth Google Maps-style zoom
-    map.flyToBounds(routeLine.getBounds(), {
-        padding: [50, 50],
-        duration: 1.5
-    });
-}
-
-// ================= GPS TRACKING =================
-
-function startTracking() {
+function startNav() {
 
     if (!navigator.geolocation) {
         alert("GPS not supported");
         return;
     }
 
-    watchId = navigator.geolocation.watchPosition(pos => {
+    document.getElementById("info").innerHTML =
+        "Status: Starting...<br>Speed: 0 mph<br>Instruction: -";
+
+    navigator.geolocation.getCurrentPosition(pos => {
+
+        const start = [pos.coords.latitude, pos.coords.longitude];
+
+        buildRoute(start, destination);
+        startTracking();
+
+    });
+}
+
+// ================= BUILD ROUTE + STEPS =================
+
+async function buildRoute(start, end) {
+
+    const url =
+        `https://router.project-osrm.org/route/v1/driving/` +
+        `${start[1]},${start[0]};${end[1]},${end[0]}` +
+        `?overview=full&geometries=geojson&steps=true`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const route = data.routes[0];
+
+    const coords = route.geometry.coordinates;
+    const latlngs = coords.map(c => [c[1], c[0]]);
+
+    steps = route.legs[0].steps;
+
+    if (routeLine) map.removeLayer(routeLine);
+
+    routeLine = L.polyline(latlngs, {
+        color: "blue",
+        weight: 5
+    }).addTo(map);
+
+    map.fitBounds(routeLine.getBounds(), {
+        padding: [50, 50]
+    });
+
+    speak("Navigation started. Follow the highlighted route.");
+    updateInstruction();
+}
+
+// ================= LIVE TRACKING =================
+
+function startTracking() {
+
+    watchId = navigator.geolocation.watchPosition(async pos => {
 
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
 
+        const current = [lat, lng];
+
         const speed = pos.coords.speed ? pos.coords.speed * 2.237 : 0;
-
-        // distance calculation
-        if (lastPosition) {
-            totalDistance += getDistance(lastPosition, [lat, lng]);
-        }
-
-        lastPosition = [lat, lng];
-
-        // update UI
-        document.getElementById("stats").innerHTML =
-            `Speed: ${speed.toFixed(1)} mph<br>` +
-            `Distance: ${totalDistance.toFixed(0)} m`;
 
         // marker
         if (!userMarker) {
-            userMarker = L.marker([lat, lng], {
-                icon: userIcon
-            }).addTo(map);
+            userMarker = L.marker(current, { icon: arrowIcon }).addTo(map);
         } else {
-            userMarker.setLatLng([lat, lng]);
+            userMarker.setLatLng(current);
         }
 
         // smooth follow
-        map.panTo([lat, lng], {
-            animate: true,
-            duration: 0.5
-        });
+        map.panTo(current, { animate: true, duration: 0.5 });
+
+        // reroute every update (simple version of Google-style behaviour)
+        if (lastLatLng) {
+            const dist = getDistance(lastLatLng, current);
+
+            // if user deviates slightly or moves, refresh route occasionally
+            if (dist > 10) {
+                buildRoute(current, destination);
+            }
+        }
+
+        lastLatLng = current;
+
+        updateInfo(speed);
+
+        updateInstruction(current);
 
     }, err => {
-        alert("GPS error: " + err.message);
+        alert(err.message);
     }, {
         enableHighAccuracy: true,
-        maximumAge: 1000,
-        timeout: 5000
+        maximumAge: 1000
     });
 }
 
-// ================= DISTANCE FUNCTION =================
+// ================= INSTRUCTIONS =================
+
+function updateInstruction(current) {
+
+    if (!steps || steps.length === 0) return;
+
+    const step = steps[currentStepIndex];
+
+    if (!step) return;
+
+    document.getElementById("info").innerHTML =
+        document.getElementById("info").innerHTML.split("Instruction:")[0] +
+        "Instruction: " + step.maneuver.instruction;
+
+    speak(step.maneuver.instruction);
+
+    currentStepIndex++;
+}
+
+// ================= INFO UI =================
+
+function updateInfo(speed) {
+
+    document.getElementById("info").innerHTML =
+        `Status: Navigating<br>` +
+        `Speed: ${speed.toFixed(1)} mph<br>` +
+        `Instruction: updating...`;
+}
+
+// ================= DISTANCE =================
 
 function getDistance(a, b) {
+
     const R = 6371000;
     const toRad = x => x * Math.PI / 180;
 
@@ -240,35 +239,31 @@ function getDistance(a, b) {
         Math.cos(lat1) * Math.cos(lat2) *
         Math.sin(dLng/2) * Math.sin(dLng/2);
 
-    const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
-
-    return R * c;
+    return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x)));
 }
 
-// ================= CLEAR =================
+// ================= VOICE =================
 
-function clearAll() {
+function speak(text) {
+    const msg = new SpeechSynthesisUtterance(text);
+    msg.rate = 1;
+    msg.pitch = 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(msg);
+}
 
-    if (routeLine) {
-        map.removeLayer(routeLine);
-        routeLine = null;
-    }
+// ================= STOP =================
 
-    if (userMarker) {
-        map.removeLayer(userMarker);
-        userMarker = null;
-    }
+function stopNav() {
 
-    if (watchId) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-    }
+    if (watchId) navigator.geolocation.clearWatch(watchId);
 
-    lastPosition = null;
-    totalDistance = 0;
+    watchId = null;
 
-    document.getElementById("stats").innerHTML =
-        "Speed: 0 mph<br>Distance: 0 m";
+    document.getElementById("info").innerHTML =
+        "Status: Stopped<br>Speed: 0 mph<br>Instruction: -";
+
+    speak("Navigation stopped.");
 }
 
 </script>
