@@ -1,75 +1,78 @@
-const routeDescriptions = {
+const routes = {
 
-route1: [
-"DTC",
-"Troy Road",
-"Station Road",
-"St Margarets Road",
-"St Margarets Avenue",
-"Stanhope Avenue",
-"Long Row",
-"Brownberrie Avenue",
-"Brownberrie Drive",
-"Brownberrie Lane",
-"West End Lane",
-"West End Rise",
-"Hall Lane",
-"Rawdon Road",
-"New Road Side",
-"Abbey Road",
-"Abbeydale Way",
-"Woodhall Drive",
-"Vesper Road",
-"Cragside Walk",
-"Lea Farm Road",
-"Butcher Hill",
-"Low Lane"
-],
+route1: {
+name: "Route 1 - Loop Return",
+points: [
+[53.8421, -1.6370], // DTC
 
-route2: [
-"DTC",
-"Low Lane",
-"Butcher Hill",
-"Old Farm Approach",
-"Latchmere Drive",
-"Latchmere Cross",
-"Fillingfir Drive",
-"Ring Road",
-"Broadway",
-"New Road Side",
-"Victoria Drive",
-"Victoria Crescent",
-"Victoria Gardens",
-"Newlaithes Road",
-"Newlay Lane",
-"Abbey Road",
-"Abbey Walk",
-"Spen Lane",
-"Ghyll Road",
-"Queenswood Drive"
-],
+[53.8430, -1.6355],
+[53.8440, -1.6335],
+[53.8432, -1.6310],
+[53.8418, -1.6300],
 
-route3: [
-"DTC",
-"Low Lane",
-"Butcher Hill",
-"Lea Farm Road",
-"Cragside Walk",
-"Hawksworth Avenue",
-"Hawksworth Crescent",
-"Lea Farm Drive",
-"Lea Farm Road",
-"Vesper Road",
-"Spen Lane",
-"Old Farm Approach",
-"Latchmere Drive",
-"Ring Road",
-"Rawdon Road",
-"Layton Lane",
-"Layton Road",
-"Brownberrie Lane",
-"Station Road",
-"Troy Road"
+[53.8405, -1.6315],
+[53.8398, -1.6340],
+[53.8405, -1.6365],
+
+/* RETURN EXACT MIRROR PATH */
+[53.8418, -1.6300],
+[53.8432, -1.6310],
+[53.8440, -1.6335],
+[53.8430, -1.6355],
+
+[53.8421, -1.6370] // DTC
 ]
+},
+
+route2: {
+name: "Route 2 - Loop Return",
+points: [
+[53.8421, -1.6370],
+
+[53.8410, -1.6390],
+[53.8395, -1.6410],
+[53.8382, -1.6400],
+[53.8375, -1.6375],
+
+[53.8380, -1.6345],
+[53.8392, -1.6320],
+[53.8408, -1.6310],
+
+/* MIRROR RETURN */
+[53.8392, -1.6320],
+[53.8380, -1.6345],
+[53.8375, -1.6375],
+[53.8382, -1.6400],
+[53.8395, -1.6410],
+
+[53.8421, -1.6370]
+],
+
+route3: {
+name: "Route 3 - Extended Loop Return",
+points: [
+[53.8421, -1.6370],
+
+[53.8435, -1.6385],
+[53.8448, -1.6368],
+[53.8455, -1.6340],
+[53.8440, -1.6315],
+[53.8425, -1.6295],
+
+[53.8408, -1.6305],
+[53.8392, -1.6328],
+[53.8385, -1.6350],
+
+/* MIRROR RETURN */
+[53.8392, -1.6328],
+[53.8408, -1.6305],
+[53.8425, -1.6295],
+[53.8440, -1.6315],
+[53.8455, -1.6340],
+
+[53.8421, -1.6370]
+]
+
+}
 
 };
