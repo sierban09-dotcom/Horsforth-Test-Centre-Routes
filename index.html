@@ -2,16 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Driving Test Navigator Pro</title>
+<title>Driving Test Navigator</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body { margin: 0; font-family: Arial; }
+body {
+    margin: 0;
+    font-family: Arial;
+}
 
-#map { height: 100vh; width: 100%; }
+#map {
+    height: 100vh;
+    width: 100%;
+}
 
 .panel {
     position: absolute;
@@ -36,8 +42,6 @@ button {
     margin-top: 10px;
     font-size: 13px;
     line-height: 1.4;
-    max-height: 160px;
-    overflow-y: auto;
 }
 </style>
 </head>
@@ -51,7 +55,7 @@ button {
     <div id="info">
         Status: Idle<br>
         Speed: 0 mph<br>
-        Instruction: -
+        Route: -
     </div>
 </div>
 
@@ -75,11 +79,9 @@ let userMarker;
 let routeLine;
 let watchId;
 
-let destination = [53.842, -1.637]; // Horsforth centre
+let destination = [53.842, -1.637]; // Horsforth test centre
 
-let lastLatLng = null;
-let currentStepIndex = 0;
-let steps = [];
+let followMode = true;
 
 // ================= ICON =================
 
@@ -99,11 +101,14 @@ function startNav() {
     }
 
     document.getElementById("info").innerHTML =
-        "Status: Starting...<br>Speed: 0 mph<br>Instruction: -";
+        "Status: Starting...<br>Speed: 0 mph<br>Route: loading...";
 
     navigator.geolocation.getCurrentPosition(pos => {
 
-        const start = [pos.coords.latitude, pos.coords.longitude];
+        const start = [
+            pos.coords.latitude,
+            pos.coords.longitude
+        ];
 
         buildRoute(start, destination);
         startTracking();
@@ -111,14 +116,14 @@ function startNav() {
     });
 }
 
-// ================= BUILD ROUTE + STEPS =================
+// ================= BUILD ROUTE =================
 
 async function buildRoute(start, end) {
 
     const url =
         `https://router.project-osrm.org/route/v1/driving/` +
         `${start[1]},${start[0]};${end[1]},${end[0]}` +
-        `?overview=full&geometries=geojson&steps=true`;
+        `?overview=full&geometries=geojson&steps=true&alternatives=false`;
 
     const res = await fetch(url);
     const data = await res.json();
@@ -128,61 +133,58 @@ async function buildRoute(start, end) {
     const coords = route.geometry.coordinates;
     const latlngs = coords.map(c => [c[1], c[0]]);
 
-    steps = route.legs[0].steps;
-
-    if (routeLine) map.removeLayer(routeLine);
+    if (routeLine) {
+        map.removeLayer(routeLine);
+    }
 
     routeLine = L.polyline(latlngs, {
         color: "blue",
         weight: 5
     }).addTo(map);
 
-    map.fitBounds(routeLine.getBounds(), {
-        padding: [50, 50]
+    // IMPORTANT FIX: no fitBounds glitch anymore
+    map.flyTo(start, 16, {
+        duration: 1.5
     });
 
-    speak("Navigation started. Follow the highlighted route.");
-    updateInstruction();
+    document.getElementById("info").innerHTML =
+        "Status: Navigating<br>Speed: 0 mph<br>Route: Active";
 }
 
-// ================= LIVE TRACKING =================
+// ================= TRACK USER =================
 
 function startTracking() {
 
-    watchId = navigator.geolocation.watchPosition(async pos => {
+    watchId = navigator.geolocation.watchPosition(pos => {
 
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-
-        const current = [lat, lng];
+        const current = [
+            pos.coords.latitude,
+            pos.coords.longitude
+        ];
 
         const speed = pos.coords.speed ? pos.coords.speed * 2.237 : 0;
 
         // marker
         if (!userMarker) {
-            userMarker = L.marker(current, { icon: arrowIcon }).addTo(map);
+            userMarker = L.marker(current, {
+                icon: arrowIcon
+            }).addTo(map);
         } else {
             userMarker.setLatLng(current);
         }
 
-        // smooth follow
-        map.panTo(current, { animate: true, duration: 0.5 });
-
-        // reroute every update (simple version of Google-style behaviour)
-        if (lastLatLng) {
-            const dist = getDistance(lastLatLng, current);
-
-            // if user deviates slightly or moves, refresh route occasionally
-            if (dist > 10) {
-                buildRoute(current, destination);
-            }
+        // TRUE FOLLOW MODE (FIX FOR YOUR ISSUE)
+        if (followMode) {
+            map.setView(current, 17, {
+                animate: true,
+                duration: 0.3
+            });
         }
 
-        lastLatLng = current;
-
-        updateInfo(speed);
-
-        updateInstruction(current);
+        document.getElementById("info").innerHTML =
+            `Status: Navigating<br>` +
+            `Speed: ${speed.toFixed(1)} mph<br>` +
+            `Route: Active`;
 
     }, err => {
         alert(err.message);
@@ -192,78 +194,18 @@ function startTracking() {
     });
 }
 
-// ================= INSTRUCTIONS =================
-
-function updateInstruction(current) {
-
-    if (!steps || steps.length === 0) return;
-
-    const step = steps[currentStepIndex];
-
-    if (!step) return;
-
-    document.getElementById("info").innerHTML =
-        document.getElementById("info").innerHTML.split("Instruction:")[0] +
-        "Instruction: " + step.maneuver.instruction;
-
-    speak(step.maneuver.instruction);
-
-    currentStepIndex++;
-}
-
-// ================= INFO UI =================
-
-function updateInfo(speed) {
-
-    document.getElementById("info").innerHTML =
-        `Status: Navigating<br>` +
-        `Speed: ${speed.toFixed(1)} mph<br>` +
-        `Instruction: updating...`;
-}
-
-// ================= DISTANCE =================
-
-function getDistance(a, b) {
-
-    const R = 6371000;
-    const toRad = x => x * Math.PI / 180;
-
-    const dLat = toRad(b[0] - a[0]);
-    const dLng = toRad(b[1] - a[1]);
-
-    const lat1 = toRad(a[0]);
-    const lat2 = toRad(b[0]);
-
-    const x =
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1) * Math.cos(lat2) *
-        Math.sin(dLng/2) * Math.sin(dLng/2);
-
-    return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x)));
-}
-
-// ================= VOICE =================
-
-function speak(text) {
-    const msg = new SpeechSynthesisUtterance(text);
-    msg.rate = 1;
-    msg.pitch = 1;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(msg);
-}
-
 // ================= STOP =================
 
 function stopNav() {
 
-    if (watchId) navigator.geolocation.clearWatch(watchId);
+    if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+    }
 
     watchId = null;
 
     document.getElementById("info").innerHTML =
-        "Status: Stopped<br>Speed: 0 mph<br>Instruction: -";
-
-    speak("Navigation stopped.");
+        "Status: Stopped<br>Speed: 0 mph<br>Route: -";
 }
 
 </script>
