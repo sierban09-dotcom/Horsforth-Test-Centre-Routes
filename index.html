@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Driving Test Route Tracker</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+
+#map {
+    height: 100vh;
+    width: 100%;
+}
+
+.panel {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+    background: white;
+    padding: 12px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    width: 220px;
+}
+
+button, select {
+    width: 100%;
+    margin-top: 5px;
+    padding: 8px;
+    cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div class="panel">
+    <select id="routeSelect">
+        <option value="route1">Horsforth Route 1</option>
+        <option value="route2">Horsforth Route 2</option>
+        <option value="route3">Horsforth Route 3</option>
+    </select>
+
+    <button onclick="loadRoute()">Load Route</button>
+    <button onclick="startTracking()">Start GPS</button>
+    <button onclick="clearRoute()">Clear</button>
+    <button onclick="saveRoute()">Save Route</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+// ===================== MAP =====================
+
+const map = L.map('map').setView([53.842, -1.637], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// ===================== ROUTES (OLD HORSFORTH) =====================
+
+const horsforthRoutes = {
+    route1: [
+        [53.8432, -1.6381],
+        [53.8428, -1.6352],
+        [53.8410, -1.6320],
+        [53.8395, -1.6300],
+        [53.8379, -1.6331],
+        [53.8365, -1.6360],
+        [53.8378, -1.6402],
+        [53.8400, -1.6420],
+        [53.8422, -1.6405],
+        [53.8432, -1.6381]
+    ],
+
+    route2: [
+        [53.8420, -1.6370],
+        [53.8405, -1.6390],
+        [53.8388, -1.6415],
+        [53.8369, -1.6422],
+        [53.8355, -1.6398],
+        [53.8368, -1.6365],
+        [53.8389, -1.6340],
+        [53.8410, -1.6325],
+        [53.8420, -1.6370]
+    ],
+
+    route3: [
+        [53.8415, -1.6375],
+        [53.8400, -1.6388],
+        [53.8385, -1.6400],
+        [53.8370, -1.6385],
+        [53.8360, -1.6360],
+        [53.8375, -1.6340],
+        [53.8390, -1.6330],
+        [53.8415, -1.6375]
+    ]
+};
+
+// ===================== LAYERS =====================
+
+let routeLine = L.polyline([], { color: 'blue', weight: 5 }).addTo(map);
+let userMarker = null;
+let watchId = null;
+
+// ===================== LOAD ROUTE =====================
+
+function loadRoute() {
+    const selected = document.getElementById("routeSelect").value;
+
+    const route = horsforthRoutes[selected];
+
+    routeLine.setLatLngs(route);
+
+    map.fitBounds(routeLine.getBounds());
+}
+
+// ===================== GPS TRACKING =====================
+
+function startTracking() {
+    if (!navigator.geolocation) {
+        alert("Geolocation not supported");
+        return;
+    }
+
+    watchId = navigator.geolocation.watchPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        if (!userMarker) {
+            userMarker = L.circleMarker([lat, lng], {
+                radius: 8,
+                color: "red"
+            }).addTo(map);
+        } else {
+            userMarker.setLatLng([lat, lng]);
+        }
+
+        map.panTo([lat, lng]);
+    });
+}
+
+// ===================== CLEAR =====================
+
+function clearRoute() {
+    routeLine.setLatLngs([]);
+
+    if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+    }
+
+    if (userMarker) {
+        map.removeLayer(userMarker);
+        userMarker = null;
+    }
+}
+
+// ===================== SAVE ROUTE =====================
+
+function saveRoute() {
+    const data = JSON.stringify(routeLine.getLatLngs());
+
+    const blob = new Blob([data], { type: "application/json" });
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "route.json";
+    a.click();
+}
+
+// ===================== CLICK TO BUILD ROUTE =====================
+
+map.on('click', function(e) {
+    const latlngs = routeLine.getLatLngs();
+    latlngs.push(e.latlng);
+    routeLine.setLatLngs(latlngs);
+
+    L.marker(e.latlng).addTo(map);
+});
+</script>
+
+</body>
+</html>
