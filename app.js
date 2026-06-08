@@ -5,15 +5,15 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// ---------------- ICON ----------------
+// ================= ICON =================
 
 const arrowIcon = L.icon({
     iconUrl: "https://cdn-icons-png.flaticon.com/512/60/60525.png",
-    iconSize: [22, 22],
-    iconAnchor: [11, 11]
+    iconSize: [26, 26],
+    iconAnchor: [13, 13]
 });
 
-// ---------------- STATE ----------------
+// ================= STATE =================
 
 let marker = null;
 let routeLine = null;
@@ -23,7 +23,10 @@ let followMode = true;
 let lastPos = null;
 let userPos = null;
 
-// ---------------- POPULATE ROUTES ----------------
+// smoothing buffer (ISSUE 4 FIX)
+let positionBuffer = [];
+
+// ================= ROUTE SELECT =================
 
 const select = document.getElementById("routeSelect");
 
@@ -34,7 +37,7 @@ Object.keys(routes).forEach(key => {
     select.appendChild(opt);
 });
 
-// ---------------- START NAV ----------------
+// ================= START NAV =================
 
 function startNavigation() {
 
@@ -62,7 +65,7 @@ function startNavigation() {
 
 }
 
-// ---------------- REAL ROAD ROUTING (ISSUE 2 FIX) ----------------
+// ================= ISSUE 2 FIX (OSRM ROUTING) =================
 
 async function drawRoute(points) {
 
@@ -85,6 +88,8 @@ async function drawRoute(points) {
             const res = await fetch(url);
             const data = await res.json();
 
+            if (!data.routes || !data.routes[0]) continue;
+
             const coords = data.routes[0].geometry.coordinates;
 
             coords.forEach(c => {
@@ -92,7 +97,7 @@ async function drawRoute(points) {
             });
 
         } catch (e) {
-            console.log("segment failed", e);
+            console.log("OSRM segment failed:", e);
         }
     }
 
@@ -106,31 +111,60 @@ async function drawRoute(points) {
     });
 }
 
-// ---------------- TRACKING (ISSUE 3 FIX) ----------------
+// ================= ISSUE 3 + 4 FIX (SMART TRACKING + SMOOTHING) =================
 
 function trackUser() {
 
     watchId = navigator.geolocation.watchPosition(pos => {
 
-        const current = [pos.coords.latitude, pos.coords.longitude];
+        const raw = [pos.coords.latitude, pos.coords.longitude];
 
-        userPos = current;
+        userPos = raw;
 
-        if (marker) marker.setLatLng(current);
+        // ---------- smoothing buffer ----------
+        positionBuffer.push(raw);
+        if (positionBuffer.length > 5) {
+            positionBuffer.shift();
+        }
 
+        const avg = positionBuffer.reduce(
+            (acc, p) => [acc[0] + p[0], acc[1] + p[1]],
+            [0, 0]
+        ).map(v => v / positionBuffer.length);
+
+        // ---------- marker update ----------
+        if (!marker) {
+            marker = L.marker(avg, { icon: arrowIcon }).addTo(map);
+        } else {
+            marker.setLatLng(avg);
+        }
+
+        // ---------- smart follow ----------
         if (followMode) {
-            map.panTo(current, {
+            map.panTo(avg, {
                 animate: true,
-                duration: 0.3
+                duration: 0.35
             });
         }
 
-        if (lastPos && marker.setRotationAngle) {
-            const bearing = getBearing(lastPos, current);
-            marker.setRotationAngle(bearing);
+        // ---------- rotation fix (ISSUE 4) ----------
+        if (lastPos) {
+
+            const bearing = getBearing(lastPos, avg);
+
+            // plugin method (if available)
+            if (marker.setRotationAngle) {
+                marker.setRotationAngle(bearing);
+            }
+
+            // fallback method (always works visually)
+            if (marker._icon) {
+                marker._icon.style.transform =
+                    `rotate(${bearing}deg) translate(-50%, -50%)`;
+            }
         }
 
-        lastPos = current;
+        lastPos = avg;
 
     }, err => console.log(err), {
         enableHighAccuracy: true,
@@ -139,7 +173,7 @@ function trackUser() {
 
 }
 
-// ---------------- RECENTER ----------------
+// ================= RECENTER =================
 
 function recenter() {
 
@@ -154,13 +188,13 @@ function recenter() {
 
 }
 
-// ---------------- DRAG DISABLE FOLLOW ----------------
+// ================= DISABLE FOLLOW ON DRAG =================
 
 map.on('dragstart', () => {
     followMode = false;
 });
 
-// ---------------- BEARING ----------------
+// ================= BEARING CALC =================
 
 function getBearing(a, b) {
 
@@ -179,11 +213,13 @@ function getBearing(a, b) {
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
-// ---------------- STOP ----------------
+// ================= STOP =================
 
 function stopNavigation() {
 
-    if (watchId) navigator.geolocation.clearWatch(watchId);
+    if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+    }
 
     watchId = null;
 
