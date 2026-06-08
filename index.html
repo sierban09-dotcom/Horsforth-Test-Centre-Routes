@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Driving Test Route Tracker</title>
+<title>Driving Test Route Simulator</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
@@ -21,19 +21,23 @@ body {
     position: absolute;
     top: 10px;
     left: 10px;
-    z-index: 1000;
+    z-index: 999;
     background: white;
     padding: 12px;
     border-radius: 10px;
+    width: 240px;
     box-shadow: 0 0 10px rgba(0,0,0,0.2);
-    width: 220px;
 }
 
 button, select {
     width: 100%;
-    margin-top: 5px;
+    margin-top: 6px;
     padding: 8px;
-    cursor: pointer;
+}
+
+#stats {
+    margin-top: 10px;
+    font-size: 14px;
 }
 </style>
 </head>
@@ -42,15 +46,18 @@ button, select {
 
 <div class="panel">
     <select id="routeSelect">
-        <option value="route1">Horsforth Route 1</option>
-        <option value="route2">Horsforth Route 2</option>
-        <option value="route3">Horsforth Route 3</option>
+        <option value="route1">Horsforth Practice Route 1</option>
+        <option value="route2">Horsforth Practice Route 2</option>
     </select>
 
-    <button onclick="loadRoute()">Load Route</button>
+    <button onclick="loadRoute()">Load Route (Road Snapped)</button>
     <button onclick="startTracking()">Start GPS</button>
-    <button onclick="clearRoute()">Clear</button>
-    <button onclick="saveRoute()">Save Route</button>
+    <button onclick="clearAll()">Clear</button>
+
+    <div id="stats">
+        Speed: 0 mph<br>
+        Distance: 0 km
+    </div>
 </div>
 
 <div id="map"></div>
@@ -58,7 +65,8 @@ button, select {
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-// ===================== MAP =====================
+
+// ================= MAP =================
 
 const map = L.map('map').setView([53.842, -1.637], 13);
 
@@ -66,126 +74,128 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// ===================== ROUTES (OLD HORSFORTH) =====================
+// ================= ROUTE START/END POINTS =================
+// (These are approximate Horsforth test area anchors)
 
-const horsforthRoutes = {
+const routePoints = {
     route1: [
         [53.8432, -1.6381],
-        [53.8428, -1.6352],
-        [53.8410, -1.6320],
-        [53.8395, -1.6300],
-        [53.8379, -1.6331],
-        [53.8365, -1.6360],
-        [53.8378, -1.6402],
-        [53.8400, -1.6420],
-        [53.8422, -1.6405],
-        [53.8432, -1.6381]
+        [53.8375, -1.6350]
     ],
-
     route2: [
         [53.8420, -1.6370],
-        [53.8405, -1.6390],
-        [53.8388, -1.6415],
-        [53.8369, -1.6422],
-        [53.8355, -1.6398],
-        [53.8368, -1.6365],
-        [53.8389, -1.6340],
-        [53.8410, -1.6325],
-        [53.8420, -1.6370]
-    ],
-
-    route3: [
-        [53.8415, -1.6375],
-        [53.8400, -1.6388],
-        [53.8385, -1.6400],
-        [53.8370, -1.6385],
-        [53.8360, -1.6360],
-        [53.8375, -1.6340],
-        [53.8390, -1.6330],
-        [53.8415, -1.6375]
+        [53.8368, -1.6405]
     ]
 };
 
-// ===================== LAYERS =====================
+// ================= STATE =================
 
-let routeLine = L.polyline([], { color: 'blue', weight: 5 }).addTo(map);
-let userMarker = null;
-let watchId = null;
+let routeLine;
+let userMarker;
+let watchId;
+let lastPosition = null;
 
-// ===================== LOAD ROUTE =====================
+// ================= USER ICON =================
 
-function loadRoute() {
+const userIcon = L.icon({
+    iconUrl: "https://cdn-icons-png.flaticon.com/512/64/64113.png",
+    iconSize: [35, 35],
+    iconAnchor: [17, 17]
+});
+
+// ================= LOAD ROUTE (OSRM SNAP TO ROADS) =================
+
+async function loadRoute() {
+
     const selected = document.getElementById("routeSelect").value;
+    const points = routePoints[selected];
 
-    const route = horsforthRoutes[selected];
+    const url =
+        `https://router.project-osrm.org/route/v1/driving/` +
+        `${points[0][1]},${points[0][0]};${points[1][1]},${points[1][0]}?overview=full&geometries=geojson`;
 
-    routeLine.setLatLngs(route);
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const coords = data.routes[0].geometry.coordinates;
+
+    const latlngs = coords.map(c => [c[1], c[0]]);
+
+    if (routeLine) map.removeLayer(routeLine);
+
+    routeLine = L.polyline(latlngs, {
+        color: "blue",
+        weight: 5
+    }).addTo(map);
 
     map.fitBounds(routeLine.getBounds());
 }
 
-// ===================== GPS TRACKING =====================
+// ================= GPS TRACKING =================
 
 function startTracking() {
+
     if (!navigator.geolocation) {
         alert("Geolocation not supported");
         return;
     }
 
     watchId = navigator.geolocation.watchPosition(pos => {
+
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
 
+        const speed = pos.coords.speed ? pos.coords.speed * 2.237 : 0; // m/s → mph
+
+        document.getElementById("stats").innerHTML =
+            `Speed: ${speed.toFixed(1)} mph<br>` +
+            `Distance: calculating...`;
+
+        const latlng = [lat, lng];
+
         if (!userMarker) {
-            userMarker = L.circleMarker([lat, lng], {
-                radius: 8,
-                color: "red"
-            }).addTo(map);
+            userMarker = L.marker(latlng, { icon: userIcon }).addTo(map);
         } else {
-            userMarker.setLatLng([lat, lng]);
+            userMarker.setLatLng(latlng);
         }
 
-        map.panTo([lat, lng]);
+        map.panTo(latlng, { animate: true });
+
+        lastPosition = latlng;
+
+    }, err => {
+        alert("GPS error: " + err.message);
+    }, {
+        enableHighAccuracy: true,
+        maximumAge: 1000
     });
 }
 
-// ===================== CLEAR =====================
+// ================= CLEAR =================
 
-function clearRoute() {
-    routeLine.setLatLngs([]);
+function clearAll() {
 
-    if (watchId) {
-        navigator.geolocation.clearWatch(watchId);
+    if (routeLine) {
+        map.removeLayer(routeLine);
+        routeLine = null;
     }
 
     if (userMarker) {
         map.removeLayer(userMarker);
         userMarker = null;
     }
+
+    if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+
+    lastPosition = null;
+
+    document.getElementById("stats").innerHTML =
+        "Speed: 0 mph<br>Distance: 0 km";
 }
 
-// ===================== SAVE ROUTE =====================
-
-function saveRoute() {
-    const data = JSON.stringify(routeLine.getLatLngs());
-
-    const blob = new Blob([data], { type: "application/json" });
-
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "route.json";
-    a.click();
-}
-
-// ===================== CLICK TO BUILD ROUTE =====================
-
-map.on('click', function(e) {
-    const latlngs = routeLine.getLatLngs();
-    latlngs.push(e.latlng);
-    routeLine.setLatLngs(latlngs);
-
-    L.marker(e.latlng).addTo(map);
-});
 </script>
 
 </body>
