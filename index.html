@@ -1,213 +1,50 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
+
 <head>
-<meta charset="UTF-8">
-<title>Driving Test Navigator</title>
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<title>Horsforth Test Centre Routes</title>
 
-<style>
-body {
-    margin: 0;
-    font-family: Arial;
-}
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet/dist/leaflet.css">
 
-#map {
-    height: 100vh;
-    width: 100%;
-}
+<link rel="stylesheet" href="style.css">
 
-.panel {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 999;
-    background: white;
-    padding: 12px;
-    border-radius: 12px;
-    width: 280px;
-    box-shadow: 0 0 15px rgba(0,0,0,0.2);
-}
-
-button, select {
-    width: 100%;
-    margin-top: 8px;
-    padding: 10px;
-    font-size: 14px;
-}
-
-#info {
-    margin-top: 10px;
-    font-size: 13px;
-    line-height: 1.4;
-}
-</style>
 </head>
 
 <body>
 
 <div class="panel">
 
-    <select id="routeSelect">
-        <option value="route1">Horsforth Route 1</option>
-        <option value="route2">Horsforth Route 2</option>
-        <option value="route3">Horsforth Route 3</option>
-    </select>
+<h3>Horsforth Test Routes</h3>
 
-    <button onclick="startNav()">Start Navigation</button>
-    <button onclick="stopNav()">Stop</button>
+<select id="routeSelect">
 
-    <div id="info">
-        Status: Idle<br>
-        Speed: 0 mph<br>
-        Route: -
-    </div>
+<option value="route1">Route 1</option>
+<option value="route2">Route 2</option>
+<option value="route3">Route 3</option>
+
+</select>
+
+<button onclick="startNavigation()">
+Start Navigation
+</button>
+
+<div id="directions"></div>
+
 </div>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-<script>
+<script src="routes.js"></script>
 
-// ================= MAP =================
-
-const map = L.map('map').setView([53.842, -1.637], 13);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-}).addTo(map);
-
-// ================= ROUTE DESTINATIONS =================
-
-const routes = {
-    route1: [53.842, -1.637],
-    route2: [53.838, -1.650],
-    route3: [53.846, -1.620]
-};
-
-// ================= STATE =================
-
-let userMarker;
-let routeLine;
-let watchId;
-let currentDestination;
-
-// follow mode like Google Maps
-let followMode = true;
-
-// ================= ICON =================
-
-const arrowIcon = L.icon({
-    iconUrl: "https://cdn-icons-png.flaticon.com/512/32/32195.png",
-    iconSize: [35, 35],
-    iconAnchor: [17, 17]
-});
-
-// ================= START NAV =================
-
-function startNav() {
-
-    const selected = document.getElementById("routeSelect").value;
-    currentDestination = routes[selected];
-
-    document.getElementById("info").innerHTML =
-        "Status: Starting...<br>Speed: 0 mph<br>Route: loading";
-
-    navigator.geolocation.getCurrentPosition(pos => {
-
-        const start = [pos.coords.latitude, pos.coords.longitude];
-
-        buildRoute(start, currentDestination);
-        startTracking();
-
-    });
-}
-
-// ================= BUILD ROUTE =================
-
-async function buildRoute(start, end) {
-
-    const url =
-        `https://router.project-osrm.org/route/v1/driving/` +
-        `${start[1]},${start[0]};${end[1]},${end[0]}` +
-        `?overview=full&geometries=geojson&steps=true`;
-
-    const res = await fetch(url);
-    const data = await res.json();
-
-    const route = data.routes[0];
-
-    const latlngs = route.geometry.coordinates.map(c => [c[1], c[0]]);
-
-    if (routeLine) map.removeLayer(routeLine);
-
-    routeLine = L.polyline(latlngs, {
-        color: "blue",
-        weight: 5
-    }).addTo(map);
-
-    // smooth Google Maps style zoom
-    map.flyToBounds(routeLine.getBounds(), {
-        padding: [50, 50],
-        duration: 1.5
-    });
-}
-
-// ================= LIVE TRACKING =================
-
-function startTracking() {
-
-    watchId = navigator.geolocation.watchPosition(pos => {
-
-        const current = [pos.coords.latitude, pos.coords.longitude];
-
-        const speed = pos.coords.speed ? pos.coords.speed * 2.237 : 0;
-
-        // marker
-        if (!userMarker) {
-            userMarker = L.marker(current, { icon: arrowIcon }).addTo(map);
-        } else {
-            userMarker.setLatLng(current);
-        }
-
-        // FOLLOW MODE (fixes centering issue)
-        if (followMode) {
-            map.setView(current, 17, {
-                animate: true,
-                duration: 0.3
-            });
-        }
-
-        document.getElementById("info").innerHTML =
-            `Status: Navigating<br>` +
-            `Speed: ${speed.toFixed(1)} mph<br>` +
-            `Route: Active`;
-
-    }, err => {
-        alert(err.message);
-    }, {
-        enableHighAccuracy: true,
-        maximumAge: 1000
-    });
-}
-
-// ================= STOP =================
-
-function stopNav() {
-
-    if (watchId) navigator.geolocation.clearWatch(watchId);
-
-    watchId = null;
-
-    document.getElementById("info").innerHTML =
-        "Status: Stopped<br>Speed: 0 mph<br>Route: -";
-
-}
-
-</script>
+<script src="app.js"></script>
 
 </body>
+
 </html>
