@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>Horsforth Test Centre Routes</title>
+<title>Horsforth Driving Test Routes</title>
 
-<link rel="stylesheet"
-href="https://unpkg.com/leaflet/dist/leaflet.css">
-
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
+
+<!-- needed for arrow rotation (optional safe include) -->
+<script src="https://unpkg.com/leaflet-rotatedmarker/leaflet.rotatedMarker.js"></script>
 
 </head>
 
@@ -21,19 +21,11 @@ href="https://unpkg.com/leaflet/dist/leaflet.css">
 
 <h3>Horsforth Test Routes</h3>
 
-<select id="routeSelect">
+<select id="routeSelect"></select>
 
-<option value="route1">Route 1</option>
-<option value="route2">Route 2</option>
-<option value="route3">Route 3</option>
-
-</select>
-
-<button onclick="startNavigation()">
-Start Navigation
-</button>
-
-<div id="directions"></div>
+<button onclick="startNavigation()">Start</button>
+<button onclick="stopNavigation()">Stop</button>
+<button onclick="recenter()">Recenter</button>
 
 </div>
 
@@ -42,7 +34,6 @@ Start Navigation
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script src="routes.js"></script>
-
 <script src="app.js"></script>
 
 </body>
